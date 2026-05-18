@@ -47,6 +47,8 @@
 .action-btn:hover{background:var(--color-background-secondary)}
 .pdf-btn{background:#E6F1FB;border-color:#B5D4F4;color:#0C447C}
 .pdf-btn:hover{background:#B5D4F4}
+.delete-action-btn{background:#FDECEA;border-color:#E4B7B7;color:#B42B24}
+.delete-action-btn:hover{background:#F7D2D0}
 .save-btn{background:#EAF3DE;border-color:#C0DD97;color:#27500A}
 .save-btn:hover{background:#C0DD97}
 .metrics-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
@@ -149,6 +151,9 @@
           </div>
           <button class="action-btn pdf-btn" onclick="exportPDF()" id="pdfBtn">
             <i class="ti ti-file-type-pdf" aria-hidden="true"></i> 匯出 PDF
+          </button>
+          <button class="action-btn delete-action-btn" onclick="deleteCurrentStudent()" id="deleteStudentBtn">
+            <i class="ti ti-trash" aria-hidden="true"></i> 刪除學員
           </button>
         </div>
       </div>
@@ -400,6 +405,11 @@ function deleteStudent(id, event) {
   updateTopbar();
   renderTab(state.tab);
   showToast(`${student.name} 已刪除`);
+}
+
+function deleteCurrentStudent() {
+  if(!state.currentId) return;
+  deleteStudent(state.currentId, {stopPropagation:()=>{}});
 }
 
 function updateTopbar() {
