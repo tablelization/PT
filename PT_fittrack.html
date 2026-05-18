@@ -284,7 +284,7 @@ const DEFAULT_PLANS = {
   ],
 };
 
-let state = {students:[], workouts:{}, body:{}, plans:{}, currentId:null, tab:'overview'};
+let state = {students:[], workouts:{}, body:{}, plans:{}, currentId:null, tab:'overview', bodyEditing:false, planEditing:false};
 
 function showToast(msg, type='success') {
   const t = document.getElementById('toast');
@@ -424,6 +424,10 @@ function updateTopbar() {
 
 function getCurrentStudent() { return state.students.find(s=>s.id===state.currentId); }
 
+function escapeHtml(value) {
+  return String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
 function selectStudent(id) {
   state.currentId = id;
   renderSidebar();
@@ -544,17 +548,26 @@ function renderBody() {
   const s = getCurrentStudent();
   if(!s) return '';
   const bd = state.body[s.id]||{conditions:[],weightHistory:[]};
+  const isEditing = state.bodyEditing;
   return `
     <div class="section-header">
       <span class="section-title">身體狀況評估</span>
-      <button class="action-btn save-btn" onclick="saveAllData()"><i class="ti ti-device-floppy" aria-hidden="true"></i> 儲存</button>
+      <div style="display:flex;gap:6px">
+        <button class="action-btn ${isEditing?'save-btn':'action-btn'}" onclick="${isEditing?'saveBodyChanges()':'toggleBodyEdit(true)'}">
+          <i class="ti ti-device-floppy" aria-hidden="true"></i> ${isEditing?'儲存':'編輯'}
+        </button>
+        ${isEditing?`<button class="action-btn" onclick="toggleBodyEdit(false)">取消</button>`:''}
+      </div>
     </div>
     <div class="card">
       <div class="section-title" style="margin-bottom:10px">今日身體狀況</div>
-      <div class="body-grid">${bd.conditions.map(c=>`
+      <div class="body-grid">${bd.conditions.map((c,i)=>`
         <div class="condition-item">
           <div class="condition-icon ${c.cls}">${c.icon}</div>
-          <div><div class="condition-label">${c.label}</div><div class="condition-status">${c.status}</div></div>
+          <div style="flex:1">
+            <div class="condition-label">${c.label}</div>
+            ${isEditing?`<input class="form-control" id="body-cond-${i}" value="${escapeHtml(c.status)}">`:`<div class="condition-status">${c.status}</div>`}
+          </div>
         </div>`).join('')}
       </div>
     </div>
@@ -577,10 +590,16 @@ function renderPlan() {
   const s = getCurrentStudent();
   if(!s) return '';
   const plan = state.plans[s.id]||[];
+  const isEditing = state.planEditing;
   return `
     <div class="section-header">
       <span class="section-title">本週訓練計畫</span>
-      <button class="action-btn save-btn" onclick="saveAllData()"><i class="ti ti-device-floppy" aria-hidden="true"></i> 儲存</button>
+      <div style="display:flex;gap:6px">
+        <button class="action-btn ${isEditing?'save-btn':'action-btn'}" onclick="${isEditing?'savePlanChanges()':'togglePlanEdit(true)'}">
+          <i class="ti ti-device-floppy" aria-hidden="true"></i> ${isEditing?'儲存':'編輯'}
+        </button>
+        ${isEditing?`<button class="action-btn" onclick="togglePlanEdit(false)">取消</button>`:''}
+      </div>
     </div>
     <div class="card">
       <div style="display:flex;gap:5px">${plan.map(d=>`
@@ -590,16 +609,90 @@ function renderPlan() {
         </div>`).join('')}
       </div>
     </div>
-    ${plan.filter(d=>d.exercises.length>0).map(d=>`
+    ${plan.map((d,i)=>`
       <div class="card">
         <div class="workout-header">
           <span class="workout-date">${d.day} · ${d.type}</span>
           <span class="badge badge-blue">${d.exercises.length} 個動作</span>
         </div>
-        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px">
-          ${d.exercises.map(e=>`<span style="font-size:11px;padding:3px 8px;background:var(--color-background-secondary);border-radius:var(--border-radius-md);color:var(--color-text-primary)">${e}</span>`).join('')}
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">訓練類型</label><input class="form-control" id="plan-type-${i}" value="${escapeHtml(d.type)}"></div>
         </div>
+        ${isEditing?`
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+            ${d.exercises.map((ex,j)=>`
+              <div style="display:flex;gap:8px;align-items:center">
+                <input class="form-control" id="plan-ex-${i}-${j}" value="${escapeHtml(ex)}" style="flex:1">
+                <button class="action-btn" style="padding:5px 10px;font-size:11px" onclick="removePlanExercise(${i},${j})">刪除</button>
+              </div>`).join('')}
+            <button class="action-btn" style="width:fit-content;padding:6px 10px;font-size:11px" onclick="addPlanExercise(${i})">＋ 新增動作</button>
+          </div>`:
+          `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px">${d.exercises.map(e=>`<span style="font-size:11px;padding:3px 8px;background:var(--color-background-secondary);border-radius:var(--border-radius-md);color:var(--color-text-primary)">${e}</span>`).join('')}</div>`}
       </div>`).join('')}`;
+}
+
+function toggleBodyEdit(enable) {
+  state.bodyEditing = enable;
+  renderTab('body');
+}
+
+function saveBodyChanges() {
+  const s = getCurrentStudent();
+  if(!s) return;
+  const bd = state.body[s.id]||{conditions:[],weightHistory:[]};
+  bd.conditions = bd.conditions.map((c,i)=>({
+    ...c,
+    status: document.getElementById(`body-cond-${i}`)?.value || c.status
+  }));
+  state.body[s.id] = bd;
+  saveToDB('body', state.body);
+  state.bodyEditing = false;
+  renderTab('body');
+  showToast('身體狀況已更新');
+}
+
+function togglePlanEdit(enable) {
+  state.planEditing = enable;
+  renderTab('plan');
+}
+
+function addPlanExercise(dayIndex) {
+  const s = getCurrentStudent();
+  if(!s) return;
+  const dayPlan = state.plans[s.id]?.[dayIndex];
+  if(!dayPlan) return;
+  dayPlan.exercises.push('');
+  renderTab('plan');
+}
+
+function removePlanExercise(dayIndex, exIndex) {
+  const s = getCurrentStudent();
+  if(!s) return;
+  const dayPlan = state.plans[s.id]?.[dayIndex];
+  if(!dayPlan) return;
+  dayPlan.exercises.splice(exIndex, 1);
+  renderTab('plan');
+}
+
+function savePlanChanges() {
+  const s = getCurrentStudent();
+  if(!s) return;
+  const plan = state.plans[s.id]||[];
+  plan.forEach((d,i)=>{
+    const typeInput = document.getElementById(`plan-type-${i}`);
+    if(typeInput) {
+      d.type = typeInput.value || d.type;
+    }
+    d.exercises = d.exercises.map((_,j)=>{
+      const exInput = document.getElementById(`plan-ex-${i}-${j}`);
+      return exInput?.value.trim() || '';
+    }).filter(Boolean);
+  });
+  state.plans[s.id] = plan;
+  saveToDB('plans', state.plans);
+  state.planEditing = false;
+  renderTab('plan');
+  showToast('本週課表已更新');
 }
 
 async function saveWorkout() {
